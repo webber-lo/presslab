@@ -89,7 +89,7 @@ def get_drive_service():
     return build('drive', 'v3', credentials=creds), build('docs', 'v1', credentials=creds)
 
 def get_oauth_drive_service():
-    """用 OAuth 建立 Drive 服務（上傳檔案到個人 Drive 用）"""
+    """用 OAuth 建立 Drive + Docs 服務"""
     creds = Credentials(
         token=None,
         refresh_token=st.secrets["GOOGLE_REFRESH_TOKEN"],
@@ -97,7 +97,9 @@ def get_oauth_drive_service():
         client_secret=st.secrets["GOOGLE_CLIENT_SECRET"],
         token_uri="https://oauth2.googleapis.com/token"
     )
-    return build('drive', 'v3', credentials=creds)
+    drive = build('drive', 'v3', credentials=creds)
+    docs = build('docs', 'v1', credentials=creds)
+    return drive, docs
 
 def create_drive_folder(drive_service, folder_name, parent_folder_id):
     """在指定資料夾下建立子資料夾"""
@@ -267,8 +269,7 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
         folder_name = f"{speaker_name}_{speaker_title}_{topic}"
 
     try:
-        drive_service, docs_service = get_drive_service()
-        oauth_drive = get_oauth_drive_service()
+        oauth_drive, docs_service = get_oauth_drive_service()
 
         # ── 建立 Drive 資料夾
         with st.status("📁 建立 Google Drive 資料夾...", expanded=True) as status:
