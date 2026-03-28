@@ -134,7 +134,7 @@ def check_password():
 
     st.title("🎙️ PRESSLAB")
     st.caption("請輸入密碼以繼續")
-    password = st.text_input("密碼", type="password", placeholder="輸入密碼")
+    password = st.text_input("密碼", type="password")
     if st.button("登入", type="primary"):
         if password == st.secrets["APP_PASSWORD"]:
             st.session_state.authenticated = True
@@ -157,11 +157,11 @@ st.divider()
 st.subheader("講者資訊")
 col1, col2 = st.columns(2)
 with col1:
-    speaker_name = st.text_input("講者姓名 *", placeholder="簡立峰")
-    speaker_title = st.text_input("講者職稱 *", placeholder="台灣董事總經理")
+    speaker_name = st.text_input("講者姓名 *")
+    speaker_title = st.text_input("講者職稱 *")
 with col2:
-    speaker_company = st.text_input("講者公司（選填）", placeholder="Google")
-    topic = st.text_input("演講題目 *", placeholder="AI Agent 時代的台灣機會")
+    speaker_company = st.text_input("講者公司（選填）")
+    topic = st.text_input("演講題目 *")
 
 event_name = st.text_input("活動名稱", value="AI 創新百強趨勢年會")
 
@@ -183,11 +183,11 @@ st.divider()
 st.subheader("指定主題（選填）")
 col1, col2, col3 = st.columns(3)
 with col1:
-    t1 = st.text_input("主題一", placeholder="例：AI 人才培育")
+    t1 = st.text_input("主題一")
 with col2:
-    t2 = st.text_input("主題二", placeholder="例：數據驅動決策")
+    t2 = st.text_input("主題二")
 with col3:
-    t3 = st.text_input("主題三", placeholder="例：供應鏈韌性")
+    t3 = st.text_input("主題三")
 
 st.divider()
 
@@ -338,7 +338,7 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
     "重點二（20字以內）",
     "重點三（20字以內）"
   ],
-  "body": "正文（字數硬性規定：不得少於800字，不得超過1,000字，精華摘要風格，點到為止不過度展開，結構：開場→核心結論→{topic_body}→結尾前瞻，每150-200字插入段落小標題）"
+  "body": "正文（字數硬性規定：不得少於1,100字，不得超過1,200字，精華精要風格，每個重點點到為止不過度展開，結構：開場→核心結論→{topic_body}→結尾前瞻，每150-200字插入段落小標題）"
 }}
 
 {WRITING_TEMPLATE}
@@ -378,6 +378,15 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
                     if (i > 0 and is_cjk(chars[i-1])) or (i < len(chars)-1 and is_cjk(chars[i+1])):
                         chars[i] = punct_map[char]
             body = ''.join(chars)
+
+            # 強制截斷：超過 1,000 字在句號處截斷
+            if len(body) > 1000:
+                cutoff = body[:1050]
+                last_period = cutoff.rfind('。')
+                if last_period > 800:
+                    body = body[:last_period+1]
+                else:
+                    body = body[:1000]
 
             st.write(f"✅ Claude 完成（內文 {len(body)} 字）")
             status.update(label="✍️ 報導稿完成", state="complete")
