@@ -150,7 +150,7 @@ if not check_password():
 # 主介面
 # ════════════════════════════════════════
 st.title("🎙️ PRESSLAB")
-st.caption("AI 演講出稿系統 · Gemini × Claude Sonnet")
+st.caption("即時出稿系統 · Gemini × Claude Sonnet")
 st.divider()
 
 # ── 講者資訊
