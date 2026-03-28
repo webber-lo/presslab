@@ -163,7 +163,7 @@ with col2:
     speaker_company = st.text_input("講者公司（選填）")
     topic = st.text_input("演講題目 *")
 
-event_name = st.text_input("活動名稱", value="AI 創新百強趨勢年會")
+event_name = st.text_input("活動名稱")
 
 st.divider()
 
