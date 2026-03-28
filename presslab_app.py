@@ -8,6 +8,7 @@ from PIL import Image
 import anthropic
 import google.generativeai as genai
 from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
 
@@ -76,7 +77,7 @@ WRITING_TEMPLATE = """
 # Google Drive 工具函式
 # ════════════════════════════════════════
 def get_drive_service():
-    """用 Service Account 建立 Drive 服務"""
+    """用 Service Account 建立 Docs 服務（建立 Google Doc 用）"""
     creds_info = st.secrets["google_service_account"]
     creds = service_account.Credentials.from_service_account_info(
         creds_info,
@@ -86,6 +87,17 @@ def get_drive_service():
         ]
     )
     return build('drive', 'v3', credentials=creds), build('docs', 'v1', credentials=creds)
+
+def get_oauth_drive_service():
+    """用 OAuth 建立 Drive 服務（上傳檔案到個人 Drive 用）"""
+    creds = Credentials(
+        token=None,
+        refresh_token=st.secrets["GOOGLE_REFRESH_TOKEN"],
+        client_id=st.secrets["GOOGLE_CLIENT_ID"],
+        client_secret=st.secrets["GOOGLE_CLIENT_SECRET"],
+        token_uri="https://oauth2.googleapis.com/token"
+    )
+    return build('drive', 'v3', credentials=creds)
 
 def create_drive_folder(drive_service, folder_name, parent_folder_id):
     """在指定資料夾下建立子資料夾"""
@@ -256,10 +268,11 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
 
     try:
         drive_service, docs_service = get_drive_service()
+        oauth_drive = get_oauth_drive_service()
 
         # ── 建立 Drive 資料夾
         with st.status("📁 建立 Google Drive 資料夾...", expanded=True) as status:
-            folder_id = create_drive_folder(drive_service, folder_name, parent_folder_id)
+            folder_id = create_drive_folder(oauth_drive, folder_name, parent_folder_id)
             st.write(f"✅ 資料夾已建立：{folder_name}")
 
             # 上傳音檔
@@ -268,7 +281,7 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
             mime_map = {'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'm4a': 'audio/mp4',
                        'aac': 'audio/aac', 'ogg': 'audio/ogg', 'flac': 'audio/flac'}
             audio_mime = mime_map.get(audio_ext, 'audio/mpeg')
-            audio_drive_id = upload_to_drive(drive_service, audio_bytes, audio_file.name, audio_mime, folder_id)
+            audio_drive_id = upload_to_drive(oauth_drive, audio_bytes, audio_file.name, audio_mime, folder_id)
             st.write(f"✅ 音檔上傳完成：{audio_file.name}")
 
             # 上傳照片
@@ -280,15 +293,15 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
                 compressed_buf = io.BytesIO()
                 img.save(compressed_buf, 'JPEG', quality=85)
                 compressed_bytes = compressed_buf.getvalue()
-                photo_id = upload_to_drive(drive_service, compressed_bytes, 'photo.jpg', 'image/jpeg', folder_id)
-                photo_public_url = make_file_public(drive_service, photo_id)
+                photo_id = upload_to_drive(oauth_drive, compressed_bytes, 'photo.jpg', 'image/jpeg', folder_id)
+                photo_public_url = make_file_public(oauth_drive, photo_id)
                 st.write("✅ 照片上傳完成")
 
             # 上傳 PDF
             pdf_bytes_data = None
             if pdf_file:
                 pdf_bytes_data = pdf_file.read()
-                upload_to_drive(drive_service, pdf_bytes_data, pdf_file.name, 'application/pdf', folder_id)
+                upload_to_drive(oauth_drive, pdf_bytes_data, pdf_file.name, 'application/pdf', folder_id)
                 st.write("✅ PDF 上傳完成")
 
             status.update(label="📁 檔案上傳完成", state="complete")
@@ -298,10 +311,10 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
         gemini_model = genai.GenerativeModel('gemini-2.5-flash')
 
         with st.status("📝 STEP 1：處理逐字稿...", expanded=True) as status:
-            transcript_id = check_transcript_exists(drive_service, folder_id)
+            transcript_id = check_transcript_exists(oauth_drive, folder_id)
             if transcript_id:
                 st.write("⚡ 發現快取逐字稿，跳過 Gemini（節省費用）")
-                transcript = read_transcript_from_drive(drive_service, transcript_id)
+                transcript = read_transcript_from_drive(oauth_drive, transcript_id)
                 st.write(f"✅ 逐字稿讀取完成（{len(transcript)} 字）")
             else:
                 st.write("🎙️ Gemini 轉錄中（需要幾分鐘）...")
@@ -317,7 +330,7 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
                 finally:
                     os.unlink(tmp_path)
                 st.write(f"✅ 逐字稿完成（{len(transcript)} 字）")
-                save_transcript_to_drive(drive_service, folder_id, transcript)
+                save_transcript_to_drive(oauth_drive, folder_id, transcript)
                 st.write("✅ 逐字稿已存檔（下次跳過 Gemini）")
             status.update(label="📝 逐字稿完成", state="complete")
 
