@@ -78,10 +78,11 @@ def make_file_public(drive_service, file_id):
     ).execute()
     return f'https://drive.google.com/uc?export=download&id={file_id}'
 
-def check_transcript_exists(drive_service, folder_id):
-    """檢查資料夾內是否已有 transcript.txt"""
+def check_transcript_exists(drive_service, folder_id, audio_name="transcript"):
+    """檢查資料夾內是否已有逐字稿"""
+    transcript_name = f"{audio_name}_transcript.txt"
     results = drive_service.files().list(
-        q=f"'{folder_id}' in parents and name='transcript.txt' and trashed=false",
+        q=f"'{folder_id}' in parents and name='{transcript_name}' and trashed=false",
         fields='files(id)'
     ).execute()
     files = results.get('files', [])
@@ -92,10 +93,10 @@ def read_transcript_from_drive(drive_service, file_id):
     content = drive_service.files().get_media(fileId=file_id).execute()
     return content.decode('utf-8')
 
-def save_transcript_to_drive(drive_service, folder_id, transcript_text):
-    """把逐字稿存成 transcript.txt"""
-    meta = {'name': 'transcript.txt', 'parents': [folder_id]}
-    media = MediaIoBaseUpload(
+def save_transcript_to_drive(drive_service, folder_id, transcript_text, audio_name="transcript"):
+    """把逐字稿存成 音檔名稱_transcript.txt"""
+    transcript_name = f"{audio_name}_transcript.txt"
+    meta = {'name': transcript_name, 'parents': [folder_id]}
         io.BytesIO(transcript_text.encode('utf-8')),
         mimetype='text/plain'
     )
@@ -275,6 +276,8 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
         gemini_model = genai.GenerativeModel('gemini-2.5-flash')
 
         with st.status("📝 STEP 1：處理逐字稿...", expanded=True) as status:
+            audio_base_name = audio_file.name.rsplit(".", 1)[0]
+transcript_id = check_transcript_exists(oauth_drive, folder_id, audio_base_name)
             transcript_id = check_transcript_exists(oauth_drive, folder_id)
             if transcript_id:
                 st.write("⚡ 發現快取逐字稿，跳過 Gemini（節省費用）")
@@ -327,7 +330,7 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
                 finally:
                     os.unlink(tmp_path)
                 st.write(f"✅ 逐字稿完成（{len(transcript)} 字）")
-                save_transcript_to_drive(oauth_drive, folder_id, transcript)
+                save_transcript_to_drive(oauth_drive, folder_id, transcript, audio_base_name)
                 st.write("✅ 逐字稿已存檔（下次跳過 Gemini）")
             status.update(label="📝 逐字稿完成", state="complete")
 
