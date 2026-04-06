@@ -6,6 +6,7 @@ import json
 import tempfile
 from PIL import Image
 import anthropic
+from groq import Groq
 import google.generativeai as genai
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
@@ -150,7 +151,7 @@ if not check_password():
 # 主介面
 # ════════════════════════════════════════
 st.title("🎙️ PRESSLAB")
-st.caption("即時出稿系統 · Gemini × Claude Sonnet")
+st.caption("AI 演講出稿系統 · Gemini × Claude Sonnet")
 st.divider()
 
 # ── 講者資訊
@@ -163,7 +164,7 @@ with col2:
     speaker_company = st.text_input("講者公司（選填）")
     topic = st.text_input("演講題目 *")
 
-event_name = st.text_input("活動名稱")
+event_name = st.text_input("活動名稱", value="AI 創新百強趨勢年會")
 
 st.divider()
 
@@ -188,6 +189,17 @@ with col2:
     t2 = st.text_input("主題二")
 with col3:
     t3 = st.text_input("主題三")
+
+st.divider()
+
+# ── 寫稿模型
+st.subheader("寫稿模型")
+writing_model = st.radio(
+    "選擇寫稿模型",
+    ["Claude Sonnet（高品質）", "Gemini Flash（快速省錢）"],
+    horizontal=True,
+    label_visibility="collapsed"
+)
 
 st.divider()
 
@@ -269,16 +281,49 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
                 transcript = read_transcript_from_drive(oauth_drive, transcript_id)
                 st.write(f"✅ 逐字稿讀取完成（{len(transcript)} 字）")
             else:
-                st.write("🎙️ Gemini 轉錄中（需要幾分鐘）...")
+                audio_size_mb = len(audio_bytes) / (1024 * 1024)
                 with tempfile.NamedTemporaryFile(suffix=f'.{audio_ext}', delete=False) as tmp:
                     tmp.write(audio_bytes)
                     tmp_path = tmp.name
                 try:
-                    audio_upload = genai.upload_file(tmp_path, mime_type=audio_mime)
-                    transcript = gemini_model.generate_content([
-                        audio_upload,
-                        '請將這段演講音檔完整轉錄成繁體中文逐字稿，保留所有內容，包括數據、案例、金句，不要摘要也不要省略。'
-                    ]).text
+                    if audio_size_mb < 25:
+                        st.write(f"⚡ 音檔 {audio_size_mb:.1f}MB，使用 Groq Whisper（快速免費）...")
+                        groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+                        with open(tmp_path, 'rb') as f:
+                            result = groq_client.audio.transcriptions.create(
+                                file=(audio_file.name, f.read()),
+                                model="whisper-large-v3",
+                                language="zh",
+                                response_format="text"
+                            )
+                        transcript = result
+                    else:
+                        st.write(f"🎙️ 音檔 {audio_size_mb:.1f}MB，使用 Gemini Flash 轉錄中...")
+                        audio_upload = genai.upload_file(tmp_path, mime_type=audio_mime)
+                        transcript = gemini_model.generate_content([
+                            audio_upload,
+                        '''## Role
+你是一位專業的逐字稿記錄員，專門負責將演講內容轉換為結構化的文字檔案。
+
+## Constraints（嚴格遵守）
+1. **禁止摘要：** 請保留所有內容，不可自行濃縮、刪除或概括講者的話。
+2. **禁止分析：** 照實記錄，嚴禁加入任何分析、建議或進一步解釋。
+3. **語言要求：** 全程使用「繁體中文」，禁止中國用語。
+4. **術語處理：** 確保專有名詞、數據、英文縮寫拼寫正確。
+
+## Output Format（Markdown）
+1. **時間戳記規則：**
+   - 每隔約 1 分鐘標記一次，格式為 [MM:SS]（例如 `[05:30]`）。
+   - 遇到「話題轉換」時，必須強制換行並標記時間戳。
+
+2. **段落標題規則：**
+   - 當講者切換到新主題或重要論點時，使用三級標題：`### [時間戳] 主題名稱`
+   - 範例：`### [12:45] AI 在台灣產業的應用`
+
+3. **排版：** 使用清晰的換行，避免大片文字堆疊。
+
+請將提供的演講音檔完整轉錄為繁體中文逐字稿，不要摘要，不要省略。'''
+                        ]).text
                 finally:
                     os.unlink(tmp_path)
                 st.write(f"✅ 逐字稿完成（{len(transcript)} 字）")
@@ -318,11 +363,13 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
         if speaker_company or speaker_title:
             speaker_info += '/' + (speaker_company or '') + (speaker_title or '')
 
-        with st.status("✍️ STEP 3：Claude 撰寫報導稿...", expanded=True) as status:
-            st.write("🤖 Claude Sonnet 寫作中...")
-            claude_client = anthropic.Anthropic(api_key=claude_key)
+        use_gemini_writing = writing_model == "Gemini Flash（快速省錢）"
+        model_label = "Gemini Flash" if use_gemini_writing else "Claude Sonnet"
 
-            claude_prompt = f"""活動：{event_name}
+        with st.status(f"✍️ STEP 3：{model_label} 撰寫報導稿...", expanded=True) as status:
+            st.write(f"🤖 {model_label} 寫作中...")
+
+            writing_prompt = f"""活動：{event_name}
 講者：{speaker_info}
 講題：{topic}
 主題分配：{topic_guide}
@@ -350,14 +397,18 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
 
 只輸出 JSON，不要其他文字。"""
 
-            response = claude_client.messages.create(
-                model='claude-sonnet-4-5',
-                max_tokens=4096,
-                temperature=0.3,
-                messages=[{'role': 'user', 'content': claude_prompt}]
-            )
-
-            raw = response.content[0].text.strip()
+            if use_gemini_writing:
+                response_obj = gemini_model.generate_content(writing_prompt)
+                raw = response_obj.text.strip()
+            else:
+                claude_client = anthropic.Anthropic(api_key=claude_key)
+                response_obj = claude_client.messages.create(
+                    model='claude-sonnet-4-5',
+                    max_tokens=4096,
+                    temperature=0.3,
+                    messages=[{'role': 'user', 'content': writing_prompt}]
+                )
+                raw = response_obj.content[0].text.strip()
             if raw.startswith('```'):
                 raw = re.sub(r'^```[a-z]*\n?', '', raw)
                 raw = re.sub(r'\n?```$', '', raw).strip()
