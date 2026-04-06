@@ -291,7 +291,7 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
                         groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
                         with open(tmp_path, 'rb') as f:
                             result = groq_client.audio.transcriptions.create(
-                                file=(audio_file.name, f.read()),
+                                file=(f"{audio_file.name}.mp3", f.read(), "audio/mpeg"),
                                 model="whisper-large-v3",
                                 language="zh",
                                 response_format="text"
