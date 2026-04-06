@@ -97,6 +97,7 @@ def save_transcript_to_drive(drive_service, folder_id, transcript_text, audio_na
     """把逐字稿存成 音檔名稱_transcript.txt"""
     transcript_name = f"{audio_name}_transcript.txt"
     meta = {'name': transcript_name, 'parents': [folder_id]}
+    media = MediaIoBaseUpload(
         io.BytesIO(transcript_text.encode('utf-8')),
         mimetype='text/plain'
     )
@@ -165,7 +166,7 @@ with col2:
     speaker_company = st.text_input("講者公司（選填）")
     topic = st.text_input("演講題目 *")
 
-event_name = st.text_input("活動名稱")
+event_name = st.text_input("活動名稱", value="AI 創新百強趨勢年會")
 
 st.divider()
 
@@ -277,8 +278,7 @@ if st.button("⚡ 開始生成報導稿", type="primary", use_container_width=Tr
 
         with st.status("📝 STEP 1：處理逐字稿...", expanded=True) as status:
             audio_base_name = audio_file.name.rsplit(".", 1)[0]
-transcript_id = check_transcript_exists(oauth_drive, folder_id, audio_base_name)
-            transcript_id = check_transcript_exists(oauth_drive, folder_id)
+            transcript_id = check_transcript_exists(oauth_drive, folder_id, audio_base_name)
             if transcript_id:
                 st.write("⚡ 發現快取逐字稿，跳過 Gemini（節省費用）")
                 transcript = read_transcript_from_drive(oauth_drive, transcript_id)
